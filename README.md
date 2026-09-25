@@ -11,6 +11,7 @@ Open `index.html` in Chrome or Firefox (or serve it with GitHub Pages).
 **Interface layers.** No air gap. Between each pair of copies there's a thin slab (1–10 layers) shaped like the part's top face, holes included, and assigned to a second filament. Pick two materials that don't bond, like PLA parts with PETG interface layers, and the stack separates cleanly. Made for AMS setups.
 
 - The whole stack is one object: parts and slabs are its parts, each with its own filament slot.
+- Wall loops are set per part (defaults: 3 for parts, 2 for interface slabs) and show up as part settings in BambuStudio.
 - `interface_shells` is turned on, so every part keeps a real top and bottom surface where it touches a slab.
 - If the top isn't flat, the slab falls back to the part's bounding rectangle.
 

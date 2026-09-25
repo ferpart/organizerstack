@@ -119,6 +119,8 @@
     <div class="iface-only section-body" style="flex-direction:column">
       <div class="row"><label for="tileSlot"><span class="slot p">P</span>Part filament</label><span><input type="number" id="tileSlot" min="1" max="16" value="1"><span class="unit"></span></span></div>
       <div class="row"><label for="ifaceSlot"><span class="slot i">I</span>Interface filament</label><span><input type="number" id="ifaceSlot" min="1" max="16" value="2"><span class="unit"></span></span></div>
+      <div class="row"><label for="tileWalls"><span class="slot p">P</span>Part wall loops</label><span><input type="number" id="tileWalls" min="1" max="10" value="3"><span class="unit"></span></span></div>
+      <div class="row"><label for="ifaceWalls"><span class="slot i">I</span>Interface wall loops</label><span><input type="number" id="ifaceWalls" min="1" max="10" value="2"><span class="unit"></span></span></div>
     </div>
 
     <div class="note">
@@ -166,6 +168,8 @@ function settings() {
     layerH, layers, gap: layerH * layers,
     tileSlot: Math.round(clamp(num('tileSlot'), 1, 16, 1)),
     ifaceSlot: Math.round(clamp(num('ifaceSlot'), 1, 16, 2)),
+    tileWalls: Math.round(clamp(num('tileWalls'), 1, 10, 3)),
+    ifaceWalls: Math.round(clamp(num('ifaceWalls'), 1, 10, 2)),
   };
 }
 
@@ -406,10 +410,12 @@ ${parts.map(p => `<component p:path="/3D/Objects/object_1.model" objectid="${p.m
 <part id="1" subtype="normal_part">
 <metadata key="name" value="${esc(name)}"/>
 <metadata key="extruder" value="${s.tileSlot}"/>
+<metadata key="wall_loops" value="${s.tileWalls}"/>
 </part>
 <part id="2" subtype="normal_part">
 <metadata key="name" value="interface"/>
 <metadata key="extruder" value="${s.ifaceSlot}"/>
+<metadata key="wall_loops" value="${s.ifaceWalls}"/>
 </part>
 </object>
 <plate>
