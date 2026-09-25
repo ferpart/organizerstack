@@ -350,18 +350,18 @@ ${items.join('\n')}
   };
 }
 
-// Interface layers: one object made of parts (copies + interface slabs), each
-// part with its own filament. Parts keep their relative positions, so the stack
-// stays intact when the slicer drops the object onto the bed.
+// Interface layers: one object whose parts are the copies and the interface
+// slabs, each part with its own filament. Every copy references the same two
+// meshes, so large parts stay small in the file. Parts keep their relative
+// positions, so the stack stays intact when the slicer drops it onto the bed.
 function interfaceFiles(s, name, h, tileMesh, slabMesh) {
   const parts = [];
   for (let i = 0; i < s.count; i++) {
     const z = i * (h + s.gap);
-    parts.push({ name: `${name} #${i + 1}`, mesh: tileMesh, z, slot: s.tileSlot });
-    if (i < s.count - 1) parts.push({ name: `interface #${i + 1}`, mesh: slabMesh, z: z + h, slot: s.ifaceSlot });
+    parts.push({ mesh: 1, z });
+    if (i < s.count - 1) parts.push({ mesh: 2, z: z + h });
   }
-  parts.forEach((p, i) => p.id = i + 1);
-  const objId = parts.length + 1;
+  const objId = 3;
 
   return {
     '3D/_rels/3dmodel.model.rels': `<?xml version="1.0" encoding="UTF-8"?>
@@ -372,7 +372,12 @@ function interfaceFiles(s, name, h, tileMesh, slabMesh) {
 <model unit="millimeter" xml:lang="en-US" ${NS}>
 <metadata name="BambuStudio:3mfVersion">1</metadata>
 <resources>
-${parts.map(p => `<object id="${p.id}" p:UUID="${uuid()}" type="model">\n${p.mesh}\n</object>`).join('\n')}
+<object id="1" p:UUID="${uuid()}" type="model">
+${tileMesh}
+</object>
+<object id="2" p:UUID="${uuid()}" type="model">
+${slabMesh}
+</object>
 </resources>
 <build/>
 </model>`,
@@ -383,7 +388,7 @@ ${parts.map(p => `<object id="${p.id}" p:UUID="${uuid()}" type="model">\n${p.mes
 <resources>
 <object id="${objId}" p:UUID="${uuid()}" type="model">
 <components>
-${parts.map(p => `<component p:path="/3D/Objects/object_1.model" objectid="${p.id}" p:UUID="${uuid()}" transform="1 0 0 0 1 0 0 0 1 0 0 ${p.z.toFixed(4)}"/>`).join('\n')}
+${parts.map(p => `<component p:path="/3D/Objects/object_1.model" objectid="${p.mesh}" p:UUID="${uuid()}" transform="1 0 0 0 1 0 0 0 1 0 0 ${p.z.toFixed(4)}"/>`).join('\n')}
 </components>
 </object>
 </resources>
@@ -398,11 +403,14 @@ ${parts.map(p => `<component p:path="/3D/Objects/object_1.model" objectid="${p.i
 <metadata key="name" value="${esc(name)} x${s.count}"/>
 <metadata key="extruder" value="${s.tileSlot}"/>
 <metadata key="interface_shells" value="1"/>
-${parts.map(p => `<part id="${p.id}" subtype="normal_part">
-<metadata key="name" value="${esc(p.name)}"/>
-<metadata key="matrix" value="1 0 0 0 0 1 0 0 0 0 1 ${p.z.toFixed(4)} 0 0 0 1"/>
-<metadata key="extruder" value="${p.slot}"/>
-</part>`).join('\n')}
+<part id="1" subtype="normal_part">
+<metadata key="name" value="${esc(name)}"/>
+<metadata key="extruder" value="${s.tileSlot}"/>
+</part>
+<part id="2" subtype="normal_part">
+<metadata key="name" value="interface"/>
+<metadata key="extruder" value="${s.ifaceSlot}"/>
+</part>
 </object>
 <plate>
 <metadata key="plater_id" value="1"/>
