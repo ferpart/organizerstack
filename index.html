@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OrganizerStack · Stack printing for flat parts</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<style>
+  :root {
+    --app: #242428; --panel: #2d2d31; --section: #333338; --canvas: #3b3b40;
+    --field: #232327; --border: #45454c; --text: #efeff0; --muted: #a0a0a6;
+    --green: #00ae42; --green-hover: #00c74c; --part: #e6e6e6; --iface: #f39c12; --err: #ff6b6b;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--app); color:var(--text); font:13px/1.4 -apple-system, "HarmonyOS Sans", "Segoe UI", Roboto, sans-serif; height:100vh; display:flex; flex-direction:column; }
+  .topbar { display:flex; align-items:center; gap:4px; height:52px; padding:0 14px; background:var(--app); border-bottom:1px solid #1b1b1e; }
+  .brand { font-weight:700; font-size:15px; margin-right:18px; }
+  .brand span { color:var(--green); }
+  .tab { padding:8px 18px; border-radius:6px; color:var(--muted); }
+  .tab.active { background:var(--green); color:#fff; }
+  .topbar .spacer { flex:1; }
+  .main { flex:1; display:flex; min-height:0; }
+  .sidebar { width:360px; flex-shrink:0; background:var(--panel); overflow-y:auto; border-right:1px solid #1b1b1e; }
+  .section-head { display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--section); font-weight:600; border-top:1px solid #1b1b1e; }
+  .section-head .ic { color:var(--green); }
+  .section-body { padding:12px 14px 16px; }
+  .dropzone { border:1px dashed var(--border); border-radius:6px; padding:26px 12px; text-align:center; cursor:pointer; color:var(--muted); }
+  .dropzone:hover, .dropzone.dragover { border-color:var(--green); color:var(--text); }
+  .dropzone strong { color:var(--green); }
+  input[type="file"] { display:none; }
+  .file-info { display:none; align-items:center; gap:10px; }
+  .file-info.visible { display:flex; }
+  .file-meta { font-size:11px; color:var(--muted); margin-top:3px; }
+  button { font:inherit; cursor:pointer; }
+  .ghost { margin-left:auto; background:var(--field); border:1px solid var(--border); color:var(--muted); padding:4px 10px; border-radius:4px; }
+  .ghost:hover { border-color:var(--green); color:var(--text); }
+  .modes { display:flex; background:var(--field); border-radius:6px; padding:3px; margin-bottom:10px; }
+  .mode { flex:1; text-align:center; padding:6px; border-radius:4px; cursor:pointer; color:var(--muted); }
+  .mode input { display:none; }
+  .mode:has(input:checked) { background:var(--green); color:#fff; }
+  .mode-hint { color:var(--muted); font-size:11px; margin-bottom:12px; }
+  .row { display:flex; align-items:center; justify-content:space-between; padding:5px 0; }
+  .row label { color:var(--text); }
+  .row input { width:110px; background:var(--field); border:1px solid var(--border); border-radius:4px; color:var(--text); font:inherit; padding:5px 8px; text-align:left; }
+  .row input:focus { outline:none; border-color:var(--green); }
+  .unit { color:var(--muted); margin-left:6px; width:22px; display:inline-block; }
+  .slot { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:3px; font-size:11px; font-weight:700; color:#222; margin-right:8px; }
+  .slot.p { background:var(--part); } .slot.i { background:var(--iface); }
+  .iface-only { display:none; }
+  body.iface .iface-only { display:flex; }
+  .note { padding:12px 14px 20px; color:var(--muted); font-size:11.5px; line-height:1.6; }
+  .note p { margin-bottom:8px; }
+  .note strong { color:var(--text); }
+  .note a { color:var(--green); }
+  .canvas { flex:1; background:var(--canvas); position:relative; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .toolbar { position:absolute; top:14px; right:14px; display:flex; gap:8px; }
+  .generate { background:var(--green); color:#fff; border:none; border-radius:6px; padding:8px 22px; font-weight:600; }
+  .generate:hover:not(:disabled) { background:var(--green-hover); }
+  .generate:disabled { background:#4a4a50; color:#85858b; cursor:not-allowed; }
+  .plate { width:min(620px,75%); padding:40px 0 0; display:flex; flex-direction:column; align-items:center; }
+  .preview { display:flex; flex-direction:column-reverse; align-items:center; gap:2px; width:70%; }
+  .preview .t { width:100%; height:28px; background:var(--part); border-radius:2px; box-shadow:inset 0 -3px 0 rgba(0,0,0,0.15); }
+  .preview .i { width:100%; height:8px; background:var(--iface); border-radius:1px; }
+  .preview .g { height:6px; }
+  .preview .more { color:var(--muted); font-size:11px; margin-bottom:4px; }
+  .bed { width:100%; height:40px; margin-top:4px; border-radius:3px; background:repeating-linear-gradient(90deg,#55555c 0 1px,transparent 1px 24px), #2f2f34; transform:perspective(300px) rotateX(55deg); }
+  .overlay { position:absolute; left:14px; right:14px; bottom:14px; }
+  .result, .error { display:none; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:14px 16px; }
+  .result.visible, .error.visible { display:block; }
+  .error { color:var(--err); border-color:var(--err); }
+  .result-head { display:flex; align-items:center; gap:12px; margin-bottom:10px; font-weight:600; }
+  .result-head .ok { color:var(--green); }
+  .download { margin-left:auto; background:var(--green); color:#fff; text-decoration:none; padding:6px 18px; border-radius:6px; font-weight:600; }
+  .download:hover { background:var(--green-hover); }
+  .stats { display:flex; gap:22px; flex-wrap:wrap; }
+  .stat-label { color:var(--muted); font-size:11px; }
+  .stat-value { font-size:16px; font-weight:600; }
+  .stat-value small { color:var(--muted); font-size:11px; font-weight:400; }
+  @media(max-width:760px) { .main { flex-direction:column; } .sidebar { width:auto; } .canvas { min-height:420px; } }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">Organizer<span>Stack</span></div>
+  <div class="tab active">Prepare</div>
+  <div class="spacer"></div>
+</div>
+
+<div class="main">
+  <aside class="sidebar">
+    <div class="section-head" id="step1"><span class="ic">▣</span>Part</div>
+    <div class="section-body">
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept=".stl">
+        <strong>Click to browse</strong> or drop a flat .stl<br>(MultiBoard tile, bin base, sign…)
+      </div>
+      <div class="file-info" id="fileInfo">
+        <div>
+          <div id="fileName"></div>
+          <div class="file-meta" id="fileMeta"></div>
+        </div>
+        <button class="ghost" onclick="clearFile()">Remove</button>
+      </div>
+    </div>
+
+    <div class="section-head"><span class="ic">≡</span>Stack</div>
+    <div class="section-body">
+      <div class="modes">
+        <label class="mode"><input type="radio" name="mode" value="gap" checked>Air gap</label>
+        <label class="mode"><input type="radio" name="mode" value="iface">Interface layers</label>
+      </div>
+      <div class="mode-hint" id="modeHint"></div>
+      <div class="row"><label for="count">Parts high</label><span><input type="number" id="count" min="2" max="50" value="4"><span class="unit"></span></span></div>
+      <div class="row"><label for="layerH">Layer height</label><span><input type="number" id="layerH" min="0.04" max="0.4" step="0.02" value="0.20"><span class="unit">mm</span></span></div>
+      <div class="row"><label for="layers">Separation layers</label><span><input type="number" id="layers" min="1" max="10" value="1"><span class="unit"></span></span></div>
+    </div>
+
+    <div class="iface-only section-head"><span class="ic">◉</span>Project Filaments</div>
+    <div class="iface-only section-body" style="flex-direction:column">
+      <div class="row"><label for="tileSlot"><span class="slot p">P</span>Part filament</label><span><input type="number" id="tileSlot" min="1" max="16" value="1"><span class="unit"></span></span></div>
+      <div class="row"><label for="ifaceSlot"><span class="slot i">I</span>Interface filament</label><span><input type="number" id="ifaceSlot" min="1" max="16" value="2"><span class="unit"></span></span></div>
+    </div>
+
+    <div class="note">
+      <p><strong>Air gap:</strong> parts are stacked with a gap of <em>layers × layer height</em>. The slicer leaves that space empty, so each part rests on a thin air layer and pulls apart by hand. BambuStudio will say the file has an invalid config and load geometry only; that's expected, click OK.</p>
+      <p><strong>Interface layers:</strong> there is no air gap: the space is filled with a slab shaped like the part's top face, assigned to a second filament. Pick two materials that don't bond (PLA parts + PETG interface, or the other way round) and they separate cleanly. Great with an AMS.</p>
+      <p><strong>In BambuStudio:</strong> make sure the project has a filament in the interface slot, match the layer height you entered here, then slice and check the preview.</p>
+      <p>Based on <a href="https://github.com/mrj0ne5CTHS/MultiStack">MultiStack</a> by mrj0ne5CTHS (MIT). Runs entirely in your browser, nothing is uploaded.</p>
+    </div>
+  </aside>
+
+  <section class="canvas">
+    <div class="toolbar"><button class="generate" id="generateBtn" onclick="generate()" disabled>Generate .3mf</button></div>
+    <div class="plate">
+      <div class="preview" id="preview"></div>
+      <div class="bed"></div>
+    </div>
+    <div class="overlay">
+      <div class="error" id="errorArea"></div>
+      <div class="result" id="resultArea">
+        <div class="result-head"><span class="ok">✓</span>Project ready<a class="download" id="downloadBtn" href="#">Download .3mf</a></div>
+        <div class="stats" id="resultStats"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+let uploadedFile = null;
+let tris = null;    // Float32Array, 9 floats per triangle
+let bbox = null;
+let outputUrl = null;
+
+const $ = id => document.getElementById(id);
+const num = id => parseFloat($(id).value);
+const mode = () => document.querySelector('input[name=mode]:checked').value;
+const esc = s => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+
+function settings() {
+  const clamp = (v, lo, hi, d) => Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d;
+  const layerH = clamp(num('layerH'), 0.04, 0.4, 0.2);
+  const layers = Math.round(clamp(num('layers'), 1, 10, 1));
+  return {
+    mode: mode(),
+    count: Math.round(clamp(num('count'), 2, 50, 4)),
+    layerH, layers, gap: layerH * layers,
+    tileSlot: Math.round(clamp(num('tileSlot'), 1, 16, 1)),
+    ifaceSlot: Math.round(clamp(num('ifaceSlot'), 1, 16, 2)),
+  };
+}
+
+function refresh() {
+  const s = settings();
+  document.body.classList.toggle('iface', s.mode === 'iface');
+  $('modeHint').textContent = s.mode === 'iface'
+    ? `${s.layers} layer${s.layers > 1 ? 's' : ''} (${s.gap.toFixed(2)} mm) of another filament between parts, no air gap.`
+    : `${s.gap.toFixed(2)} mm of air between parts so they snap apart.`;
+  $('generateBtn').disabled = !uploadedFile;
+  const shown = Math.min(s.count, 8);
+  const between = s.mode === 'iface' ? '<div class="i"></div>' : '<div class="g"></div>';
+  $('preview').innerHTML = Array(shown).fill('<div class="t"></div>').join(between) +
+    (s.count > shown ? `<div class="more">+${s.count - shown} more</div>` : '');
+}
+document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', () => {
+  $('layers').value = mode() === 'iface' ? 2 : 1;
+  refresh();
+}));
+['count', 'layers', 'layerH'].forEach(id => $(id).addEventListener('input', refresh));
+
+// ── File handling ────────────────────────────────────────────────────────────
+const dropzone = $('dropzone'), fileInput = $('fileInput');
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('dragover'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+async function handleFile(f) {
+  hideMessages();
+  if (!f.name.toLowerCase().endsWith('.stl')) return showError('Please upload a .stl file.');
+  tris = parseSTL(await f.arrayBuffer());
+  if (!tris.length) return showError('No triangles found in that STL.');
+  bbox = boundingBox(tris);
+  uploadedFile = f;
+  $('fileName').textContent = f.name;
+  $('fileMeta').textContent = `${(tris.length / 9).toLocaleString()} triangles · ${(bbox.maxX - bbox.minX).toFixed(1)} × ${(bbox.maxY - bbox.minY).toFixed(1)} × ${(bbox.maxZ - bbox.minZ).toFixed(2)} mm`;
+  dropzone.style.display = 'none';
+  $('fileInfo').classList.add('visible');
+  refresh();
+}
+function clearFile() {
+  uploadedFile = tris = bbox = null;
+  fileInput.value = '';
+  dropzone.style.display = '';
+  $('fileInfo').classList.remove('visible');
+  hideMessages();
+  refresh();
+}
+function hideMessages() { $('errorArea').classList.remove('visible'); $('resultArea').classList.remove('visible'); }
+function showError(msg) { $('errorArea').textContent = '⚠ ' + msg; $('errorArea').classList.add('visible'); }
+
+// ── Geometry ─────────────────────────────────────────────────────────────────
+function parseSTL(buf) {
+  const dv = new DataView(buf);
+  const count = buf.byteLength >= 84 ? dv.getUint32(80, true) : 0;
+  if (buf.byteLength === 84 + count * 50) {
+    const out = new Float32Array(count * 9);
+    for (let i = 0; i < count; i++)
+      for (let k = 0; k < 9; k++) out[i * 9 + k] = dv.getFloat32(84 + i * 50 + 12 + k * 4, true);
+    return out;
+  }
+  const text = new TextDecoder().decode(buf);
+  const vals = [...text.matchAll(/vertex\s+(\S+)\s+(\S+)\s+(\S+)/g)].flatMap(m => [+m[1], +m[2], +m[3]]);
+  return new Float32Array(vals.slice(0, vals.length - vals.length % 9));
+}
+
+function boundingBox(t) {
+  const b = { minX: Infinity, minY: Infinity, minZ: Infinity, maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity };
+  for (let i = 0; i < t.length; i += 3) {
+    b.minX = Math.min(b.minX, t[i]);     b.maxX = Math.max(b.maxX, t[i]);
+    b.minY = Math.min(b.minY, t[i + 1]); b.maxY = Math.max(b.maxY, t[i + 1]);
+    b.minZ = Math.min(b.minZ, t[i + 2]); b.maxZ = Math.max(b.maxZ, t[i + 2]);
+  }
+  return b;
+}
+
+// Shared-vertex mesh as 3MF <mesh> XML. Points are shifted by (dx, dy, dz).
+function meshXml(t, dx, dy, dz) {
+  const map = new Map(), verts = [], idx = [];
+  for (let i = 0; i < t.length; i += 3) {
+    const key = `${(t[i] + dx).toFixed(4)} ${(t[i + 1] + dy).toFixed(4)} ${(t[i + 2] + dz).toFixed(4)}`;
+    if (!map.has(key)) { map.set(key, map.size); verts.push(key.split(' ')); }
+    idx.push(map.get(key));
+  }
+  const v = verts.map(([x, y, z]) => `<vertex x="${x}" y="${y}" z="${z}"/>`).join('\n');
+  const f = [];
+  for (let i = 0; i < idx.length; i += 3)
+    if (idx[i] !== idx[i + 1] && idx[i + 1] !== idx[i + 2] && idx[i] !== idx[i + 2])
+      f.push(`<triangle v1="${idx[i]}" v2="${idx[i + 1]}" v3="${idx[i + 2]}"/>`);
+  return `<mesh><vertices>\n${v}\n</vertices><triangles>\n${f.join('\n')}\n</triangles></mesh>`;
+}
+
+// Slab of height h (z from 0 to h) with the footprint of the part's flat top face,
+// so the interface follows the part's outline and holes. Falls back to the
+// bounding rectangle when the top isn't flat.
+function interfaceSlab(t, b, h) {
+  const eps = 1e-3, top = [];
+  for (let i = 0; i < t.length; i += 9) {
+    if (Math.abs(t[i + 2] - b.maxZ) > eps || Math.abs(t[i + 5] - b.maxZ) > eps || Math.abs(t[i + 8] - b.maxZ) > eps) continue;
+    const cross = (t[i + 3] - t[i]) * (t[i + 7] - t[i + 1]) - (t[i + 4] - t[i + 1]) * (t[i + 6] - t[i]);
+    if (cross > 1e-9) top.push([t[i], t[i + 1]], [t[i + 3], t[i + 4]], [t[i + 6], t[i + 7]]);
+  }
+  if (!top.length) {
+    const { minX: x0, maxX: x1, minY: y0, maxY: y1 } = b;
+    top.push([x0, y0], [x1, y0], [x1, y1], [x0, y0], [x1, y1], [x0, y1]);
+  }
+  const key = p => p[0].toFixed(4) + ',' + p[1].toFixed(4);
+  const edges = new Map();  // undirected key -> directed edge, deleted when seen twice
+  const out = [];
+  for (let i = 0; i < top.length; i += 3) {
+    const [a, c, d] = [top[i], top[i + 1], top[i + 2]];
+    out.push(a[0], a[1], h, c[0], c[1], h, d[0], d[1], h);   // top, CCW from above
+    out.push(a[0], a[1], 0, d[0], d[1], 0, c[0], c[1], 0);   // bottom, reversed
+    for (const [p, q] of [[a, c], [c, d], [d, a]]) {
+      const kp = key(p), kq = key(q), k = kp < kq ? kp + '|' + kq : kq + '|' + kp;
+      if (edges.has(k)) edges.delete(k); else edges.set(k, [p, q]);
+    }
+  }
+  for (const [p, q] of edges.values())   // outline walls, facing outward
+    out.push(p[0], p[1], 0, q[0], q[1], 0, q[0], q[1], h, p[0], p[1], 0, q[0], q[1], h, p[0], p[1], h);
+  return new Float32Array(out);
+}
+
+// ── 3MF ──────────────────────────────────────────────────────────────────────
+const uuid = () => crypto.randomUUID();
+const NS = `xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" requiredextensions="p"`;
+const RELTYPE = 'http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel';
+
+function build3mf(s, name) {
+  const h = bbox.maxZ - bbox.minZ;
+  const dx = -(bbox.minX + bbox.maxX) / 2, dy = -(bbox.minY + bbox.maxY) / 2, dz = -bbox.minZ;
+  const tileMesh = meshXml(tris, dx, dy, dz);
+  const files = s.mode === 'iface'
+    ? interfaceFiles(s, name, h, tileMesh, meshXml(interfaceSlab(tris, bbox, s.gap), dx, dy, 0))
+    : gapFiles(s, name, h, tileMesh);
+
+  const zip = new JSZip();
+  zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>
+<Default Extension="config" ContentType="text/xml"/>
+</Types>`);
+  zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Target="/3D/3dmodel.model" Id="rel-1" Type="${RELTYPE}"/>
+</Relationships>`);
+  for (const [path, content] of Object.entries(files)) zip.file(path, content);
+  return { zip, totalH: s.count * h + (s.count - 1) * s.gap };
+}
+
+// Air gap: one mesh placed N times, each copy stepped up by part height + gap.
+// The BambuStudio application marker makes the slicer keep each copy's Z.
+function gapFiles(s, name, h, tileMesh) {
+  const items = Array.from({ length: s.count }, (_, i) =>
+    `<item objectid="1" transform="1 0 0 0 1 0 0 0 1 128 128 ${(i * (h + s.gap)).toFixed(4)}" printable="1"/>`);
+  return {
+    '3D/3dmodel.model': `<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US" ${NS}>
+<metadata name="Application">BambuStudio-02.02.02.56</metadata>
+<metadata name="BambuStudio:3mfVersion">1</metadata>
+<metadata name="Title">${esc(name)} x${s.count}</metadata>
+<resources>
+<object id="1" type="model" p:UUID="${uuid()}">
+${tileMesh}
+</object>
+</resources>
+<build>
+${items.join('\n')}
+</build>
+</model>`,
+    'Metadata/model_settings.config': `<?xml version="1.0" encoding="UTF-8"?>
+<config>
+<plate>
+<metadata key="plater_id" value="1"/>
+<metadata key="plater_name" value=""/>
+<metadata key="locked" value="false"/>
+</plate>
+</config>`,
+  };
+}
+
+// Interface layers: one object made of parts (copies + interface slabs), each
+// part with its own filament. Parts keep their relative positions, so the stack
+// stays intact when the slicer drops the object onto the bed.
+function interfaceFiles(s, name, h, tileMesh, slabMesh) {
+  const parts = [];
+  for (let i = 0; i < s.count; i++) {
+    const z = i * (h + s.gap);
+    parts.push({ name: `${name} #${i + 1}`, mesh: tileMesh, z, slot: s.tileSlot });
+    if (i < s.count - 1) parts.push({ name: `interface #${i + 1}`, mesh: slabMesh, z: z + h, slot: s.ifaceSlot });
+  }
+  parts.forEach((p, i) => p.id = i + 1);
+  const objId = parts.length + 1;
+
+  return {
+    '3D/_rels/3dmodel.model.rels': `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Target="/3D/Objects/object_1.model" Id="rel-1" Type="${RELTYPE}"/>
+</Relationships>`,
+    '3D/Objects/object_1.model': `<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US" ${NS}>
+<metadata name="BambuStudio:3mfVersion">1</metadata>
+<resources>
+${parts.map(p => `<object id="${p.id}" p:UUID="${uuid()}" type="model">\n${p.mesh}\n</object>`).join('\n')}
+</resources>
+<build/>
+</model>`,
+    '3D/3dmodel.model': `<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US" ${NS}>
+<metadata name="BambuStudio:3mfVersion">1</metadata>
+<metadata name="Title">${esc(name)} x${s.count}</metadata>
+<resources>
+<object id="${objId}" p:UUID="${uuid()}" type="model">
+<components>
+${parts.map(p => `<component p:path="/3D/Objects/object_1.model" objectid="${p.id}" p:UUID="${uuid()}" transform="1 0 0 0 1 0 0 0 1 0 0 ${p.z.toFixed(4)}"/>`).join('\n')}
+</components>
+</object>
+</resources>
+<build p:UUID="${uuid()}">
+<item objectid="${objId}" p:UUID="${uuid()}" transform="1 0 0 0 1 0 0 0 1 128 128 0" printable="1"/>
+</build>
+</model>`,
+    // interface_shells keeps full top/bottom shells on each part where it meets a slab.
+    'Metadata/model_settings.config': `<?xml version="1.0" encoding="UTF-8"?>
+<config>
+<object id="${objId}">
+<metadata key="name" value="${esc(name)} x${s.count}"/>
+<metadata key="extruder" value="${s.tileSlot}"/>
+<metadata key="interface_shells" value="1"/>
+${parts.map(p => `<part id="${p.id}" subtype="normal_part">
+<metadata key="name" value="${esc(p.name)}"/>
+<metadata key="matrix" value="1 0 0 0 0 1 0 0 0 0 1 ${p.z.toFixed(4)} 0 0 0 1"/>
+<metadata key="extruder" value="${p.slot}"/>
+</part>`).join('\n')}
+</object>
+<plate>
+<metadata key="plater_id" value="1"/>
+<metadata key="plater_name" value=""/>
+<metadata key="locked" value="false"/>
+<model_instance>
+<metadata key="object_id" value="${objId}"/>
+<metadata key="instance_id" value="0"/>
+<metadata key="identify_id" value="${objId + 100}"/>
+</model_instance>
+</plate>
+</config>`,
+  };
+}
+
+async function generate() {
+  hideMessages();
+  $('generateBtn').disabled = true;
+  try {
+    const s = settings();
+    const name = uploadedFile.name.replace(/\.stl$/i, '');
+    const { zip, totalH } = build3mf(s, name);
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    if (outputUrl) URL.revokeObjectURL(outputUrl);
+    outputUrl = URL.createObjectURL(blob);
+    $('downloadBtn').href = outputUrl;
+    $('downloadBtn').download = `${name}_${s.count}high_${s.mode === 'iface' ? 'interface' : 'gap'}.3mf`;
+    const stat = (l, v, u = '') => `<div class="stat"><div class="stat-label">${l}</div><div class="stat-value">${v}<small> ${u}</small></div></div>`;
+    $('resultStats').innerHTML =
+      stat('Parts', s.count) +
+      stat(s.mode === 'iface' ? 'Interface' : 'Gap', s.gap.toFixed(2), 'mm') +
+      (s.mode === 'iface' ? stat('Filaments', `${s.tileSlot} / ${s.ifaceSlot}`) : '') +
+      stat('Total height', totalH.toFixed(1), 'mm') +
+      stat('File size', (blob.size / 1024).toFixed(0), 'KB');
+    $('resultArea').classList.add('visible');
+  } catch (err) {
+    console.error(err);
+    showError(err.message || 'Unexpected error, check the browser console.');
+  }
+  $('generateBtn').disabled = false;
+}
+
+refresh();
+</script>
+</body>
+</html>
